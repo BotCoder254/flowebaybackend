@@ -3,6 +3,8 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const moment = require("moment");
 const cors = require("cors");
+const { doc, updateDoc, serverTimestamp } = require("firebase/firestore");
+const { db } = require("./firebase");
 
 const app = express();
 
@@ -113,16 +115,17 @@ app.post("/stkpush", async (req, res) => {
     console.log("Received STK push request:", req.body);
     
     // Validate required fields
-    if (!req.body.phone || !req.body.amount) {
+    if (!req.body.phone || !req.body.amount || !req.body.orderId) {
       console.error('Missing required fields:', req.body);
       return sendJsonResponse(res, 400, {
         ResponseCode: "1",
-        errorMessage: "Missing required fields. Please provide both 'phone' and 'amount'"
+        errorMessage: "Missing required fields. Please provide 'phone', 'amount', and 'orderId'"
       });
     }
 
     let phoneNumber = req.body.phone;
     const amount = req.body.amount;
+    const orderId = req.body.orderId;
 
     // Format the phone number
     phoneNumber = phoneNumber.toString().trim();
@@ -170,9 +173,9 @@ app.post("/stkpush", async (req, res) => {
       PartyA: phoneNumber,
       PartyB: "4121151",
       PhoneNumber: phoneNumber,
-      CallBackURL: "https://github.com/BotCoder254",
-      AccountReference: "KIOTA",
-      TransactionDesc: "Mpesa Daraja API stk push test",
+      CallBackURL: `https://luxecarts-mpesa.onrender.com/callback/${orderId}`,
+      AccountReference: "LUXECARTS",
+      TransactionDesc: "Payment for order",
     };
 
     console.log('Making STK push request:', {
@@ -203,7 +206,8 @@ app.post("/stkpush", async (req, res) => {
         ResponseCode: "0",
         ResponseDescription: "Success. Request accepted for processing",
         CheckoutRequestID: response.data.CheckoutRequestID,
-        CustomerMessage: response.data.CustomerMessage
+        CustomerMessage: response.data.CustomerMessage,
+        orderId: orderId
       });
     } catch (mpesaError) {
       console.error('M-Pesa API error:', mpesaError.response?.data || mpesaError);
@@ -225,6 +229,42 @@ app.post("/stkpush", async (req, res) => {
     res.status(500).json({
       ResponseCode: "1",
       ResponseDescription: error.message || "Failed to initiate payment"
+    });
+  }
+});
+
+// Add callback endpoint to handle M-Pesa callbacks
+app.post("/callback/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const callbackData = req.body;
+    
+    console.log('Received M-Pesa callback for order:', orderId, callbackData);
+
+    // Check if the payment was successful
+    if (callbackData.Body.stkCallback.ResultCode === 0) {
+      // Update order status in Firebase
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, {
+        paymentStatus: 'completed',
+        mpesaResponse: callbackData,
+        updatedAt: serverTimestamp()
+      });
+
+      console.log('Order updated successfully:', orderId);
+    }
+
+    // Always respond with success to M-Pesa
+    res.json({
+      ResponseCode: "0",
+      ResponseDesc: "Success"
+    });
+  } catch (error) {
+    console.error('Callback error:', error);
+    // Still send success response to M-Pesa
+    res.json({
+      ResponseCode: "0",
+      ResponseDesc: "Success"
     });
   }
 });
@@ -277,6 +317,17 @@ app.post("/query", async (req, res) => {
       });
 
       console.log('Query response:', response.data);
+      
+      // Check for successful payment
+      if (response.data.ResultCode === "0") {
+        // Payment was successful
+        return sendJsonResponse(res, 200, {
+          ResponseCode: "0",
+          ResultCode: "0",
+          ResultDesc: "The service request is processed successfully.",
+          isSuccessful: true
+        });
+      }
       
       // Check for specific error codes that indicate cancellation
       if (response.data.ResultCode === "1032") {
@@ -345,47 +396,6 @@ app.post("/query", async (req, res) => {
       ResultCode: "1",
       ResultDesc: error.message || "Failed to check payment status",
       errorMessage: error.message || "Payment query failed"
-    });
-  }
-});
-
-// Add payment status endpoint
-app.get('/payment-status/:requestId', async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    
-    // Get the access token
-    const auth = await getAccessToken();
-    
-    const url = 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query';
-    const timestamp = moment().format('YYYYMMDDHHmmss');
-    const password = Buffer.from(shortcode + passkey + timestamp).toString('base64');
-    
-    const response = await axios.post(url, {
-      BusinessShortCode: shortcode,
-      Password: password,
-      Timestamp: timestamp,
-      CheckoutRequestID: requestId
-    }, {
-      headers: {
-        Authorization: `Bearer ${auth}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    // Send response with proper headers
-    res.setHeader('Content-Type', 'application/json');
-    res.json({
-      ResultCode: response.data.ResultCode,
-      ResultDesc: response.data.ResultDesc,
-      ResponseCode: response.data.ResponseCode,
-      ResponseDescription: response.data.ResponseDescription
-    });
-  } catch (error) {
-    console.error('Error checking payment status:', error);
-    res.status(500).json({
-      ResultCode: "1",
-      ResultDesc: "Failed to check payment status"
     });
   }
 });
