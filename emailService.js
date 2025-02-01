@@ -1,20 +1,40 @@
 const nodemailer = require('nodemailer');
 const path = require('path');
 const nodemailerHbs = require('nodemailer-express-handlebars');
+require('dotenv').config();
 
-// Create a transporter using Gmail SMTP
+// Verify email credentials are present
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.error('Missing email credentials in environment variables');
+  console.error('EMAIL_USER:', process.env.EMAIL_USER ? 'Present' : 'Missing');
+  console.error('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Present' : 'Missing');
+}
+
+// Create a transporter using Gmail SMTP with secure connection
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // use SSL
   auth: {
-    user: process.env.EMAIL_USER, // Add your Gmail email
-    pass: process.env.EMAIL_PASS  // Add your Gmail app password
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+  debug: true // Enable debug logs
 });
 
 // Verify transporter configuration
 transporter.verify(function(error, success) {
   if (error) {
     console.error('Email transporter verification failed:', error);
+    console.error('Current email configuration:', {
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS ? '****' : 'missing'
+      }
+    });
   } else {
     console.log('Email server is ready to send messages');
   }
@@ -43,7 +63,7 @@ const sendOrderConfirmationEmail = async (orderDetails) => {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"LuxeCarts" <${process.env.EMAIL_USER}>`,
       to: orderDetails.shippingDetails.email,
       subject: 'Order Confirmation - LuxeCarts',
       template: 'orderConfirmation',
@@ -63,7 +83,7 @@ const sendOrderConfirmationEmail = async (orderDetails) => {
   } catch (error) {
     console.error('Error sending order confirmation email:', error);
     console.error('Order details:', JSON.stringify(orderDetails, null, 2));
-    throw error; // Re-throw to handle in the calling function
+    throw error;
   }
 };
 
@@ -76,7 +96,7 @@ const sendOrderStatusUpdateEmail = async (orderDetails, newStatus) => {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"LuxeCarts" <${process.env.EMAIL_USER}>`,
       to: orderDetails.shippingDetails.email,
       subject: `Order Status Update - LuxeCarts`,
       template: 'orderStatusUpdate',
@@ -95,7 +115,7 @@ const sendOrderStatusUpdateEmail = async (orderDetails, newStatus) => {
     console.error('Error sending order status update email:', error);
     console.error('Order details:', JSON.stringify(orderDetails, null, 2));
     console.error('New status:', newStatus);
-    throw error; // Re-throw to handle in the calling function
+    throw error;
   }
 };
 
@@ -108,7 +128,7 @@ const sendOrderCancellationEmail = async (orderDetails) => {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"LuxeCarts" <${process.env.EMAIL_USER}>`,
       to: orderDetails.shippingDetails.email,
       subject: 'Order Cancellation - LuxeCarts',
       template: 'orderCancellation',
@@ -126,7 +146,7 @@ const sendOrderCancellationEmail = async (orderDetails) => {
   } catch (error) {
     console.error('Error sending order cancellation email:', error);
     console.error('Order details:', JSON.stringify(orderDetails, null, 2));
-    throw error; // Re-throw to handle in the calling function
+    throw error;
   }
 };
 
