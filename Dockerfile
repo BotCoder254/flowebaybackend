@@ -1,20 +1,28 @@
 # Use Node.js LTS version
-FROM node:18-alpine
+FROM node:18-slim
 
 # Create app directory
 WORKDIR /usr/src/app
 
-# Copy package files
+# Install app dependencies
+# A wildcard is used to ensure both package.json AND package-lock.json are copied
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci --only=production
 
-# Copy app source
+# Bundle app source
 COPY . .
 
-# Expose port
+# Create necessary directories
+RUN mkdir -p views/emails
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8000
+
+# Expose the port
 EXPOSE 8000
 
-# Start the server
-CMD ["node", "server.js"] 
+# Start the application
+CMD [ "node", "server.js" ] 

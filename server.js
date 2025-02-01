@@ -3,8 +3,16 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const moment = require("moment");
 const cors = require("cors");
-const { doc, updateDoc, serverTimestamp } = require("firebase/firestore");
+const { doc, updateDoc, serverTimestamp, getDoc } = require("firebase/firestore");
 const { db } = require("./firebase");
+const { 
+  sendOrderConfirmationEmail, 
+  sendOrderStatusUpdateEmail, 
+  sendOrderCancellationEmail 
+} = require('./emailService');
+
+// Add environment variables for email configuration
+require('dotenv').config();
 
 const app = express();
 
@@ -248,8 +256,16 @@ app.post("/callback/:orderId", async (req, res) => {
       await updateDoc(orderRef, {
         paymentStatus: 'completed',
         mpesaResponse: callbackData,
-        updatedAt: serverTimestamp()
+        status: 'processing',
+        updatedAt: serverTimestamp(),
+        isVisible: true
       });
+
+      // Send order confirmation email
+      const orderDoc = await getDoc(orderRef);
+      if (orderDoc.exists()) {
+        await sendOrderConfirmationEmail(orderDoc.data());
+      }
 
       console.log('Order updated successfully:', orderId);
     }
@@ -396,6 +412,92 @@ app.post("/query", async (req, res) => {
       ResultCode: "1",
       ResultDesc: error.message || "Failed to check payment status",
       errorMessage: error.message || "Payment query failed"
+    });
+  }
+});
+
+// Add a new endpoint for order status updates
+app.post("/update-order-status", async (req, res) => {
+  try {
+    const { orderId, newStatus } = req.body;
+
+    if (!orderId || !newStatus) {
+      return res.status(400).json({
+        ResponseCode: "1",
+        errorMessage: "Order ID and new status are required"
+      });
+    }
+
+    const orderRef = doc(db, 'orders', orderId);
+    const orderDoc = await getDoc(orderRef);
+
+    if (!orderDoc.exists()) {
+      return res.status(404).json({
+        ResponseCode: "1",
+        errorMessage: "Order not found"
+      });
+    }
+
+    await updateDoc(orderRef, {
+      status: newStatus,
+      updatedAt: serverTimestamp()
+    });
+
+    // Send status update email
+    await sendOrderStatusUpdateEmail(orderDoc.data(), newStatus);
+
+    res.json({
+      ResponseCode: "0",
+      message: "Order status updated successfully"
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({
+      ResponseCode: "1",
+      errorMessage: error.message || "Failed to update order status"
+    });
+  }
+});
+
+// Add a new endpoint for order cancellation
+app.post("/cancel-order", async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        ResponseCode: "1",
+        errorMessage: "Order ID is required"
+      });
+    }
+
+    const orderRef = doc(db, 'orders', orderId);
+    const orderDoc = await getDoc(orderRef);
+
+    if (!orderDoc.exists()) {
+      return res.status(404).json({
+        ResponseCode: "1",
+        errorMessage: "Order not found"
+      });
+    }
+
+    await updateDoc(orderRef, {
+      status: 'cancelled',
+      updatedAt: serverTimestamp()
+    });
+
+    // Send cancellation email
+    await sendOrderCancellationEmail(orderDoc.data());
+
+    res.json({
+      ResponseCode: "0",
+      message: "Order cancelled successfully"
+    });
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+    res.status(500).json({
+      ResponseCode: "1",
+      errorMessage: error.message || "Failed to cancel order"
     });
   }
 });
