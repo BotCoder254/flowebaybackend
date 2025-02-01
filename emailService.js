@@ -11,6 +11,15 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// Verify transporter configuration
+transporter.verify(function(error, success) {
+  if (error) {
+    console.error('Email transporter verification failed:', error);
+  } else {
+    console.log('Email server is ready to send messages');
+  }
+});
+
 // Configure handlebars
 const handlebarOptions = {
   viewEngine: {
@@ -27,6 +36,12 @@ transporter.use('compile', nodemailerHbs(handlebarOptions));
 
 const sendOrderConfirmationEmail = async (orderDetails) => {
   try {
+    console.log('Preparing to send order confirmation email for order:', orderDetails.id);
+    
+    if (!orderDetails?.shippingDetails?.email) {
+      throw new Error('Missing recipient email address');
+    }
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: orderDetails.shippingDetails.email,
@@ -42,15 +57,24 @@ const sendOrderConfirmationEmail = async (orderDetails) => {
       }
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log('Order confirmation email sent successfully');
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Order confirmation email sent successfully:', info.messageId);
+    return info;
   } catch (error) {
     console.error('Error sending order confirmation email:', error);
+    console.error('Order details:', JSON.stringify(orderDetails, null, 2));
+    throw error; // Re-throw to handle in the calling function
   }
 };
 
 const sendOrderStatusUpdateEmail = async (orderDetails, newStatus) => {
   try {
+    console.log('Preparing to send status update email for order:', orderDetails.id);
+    
+    if (!orderDetails?.shippingDetails?.email) {
+      throw new Error('Missing recipient email address');
+    }
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: orderDetails.shippingDetails.email,
@@ -64,15 +88,25 @@ const sendOrderStatusUpdateEmail = async (orderDetails, newStatus) => {
       }
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log('Order status update email sent successfully');
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Order status update email sent successfully:', info.messageId);
+    return info;
   } catch (error) {
     console.error('Error sending order status update email:', error);
+    console.error('Order details:', JSON.stringify(orderDetails, null, 2));
+    console.error('New status:', newStatus);
+    throw error; // Re-throw to handle in the calling function
   }
 };
 
 const sendOrderCancellationEmail = async (orderDetails) => {
   try {
+    console.log('Preparing to send cancellation email for order:', orderDetails.id);
+    
+    if (!orderDetails?.shippingDetails?.email) {
+      throw new Error('Missing recipient email address');
+    }
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: orderDetails.shippingDetails.email,
@@ -86,10 +120,13 @@ const sendOrderCancellationEmail = async (orderDetails) => {
       }
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log('Order cancellation email sent successfully');
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Order cancellation email sent successfully:', info.messageId);
+    return info;
   } catch (error) {
     console.error('Error sending order cancellation email:', error);
+    console.error('Order details:', JSON.stringify(orderDetails, null, 2));
+    throw error; // Re-throw to handle in the calling function
   }
 };
 
