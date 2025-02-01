@@ -26,8 +26,6 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS ?
   [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'https://luxecarts.onrender.com',
-    'https://luxecarts-frontend.onrender.com',
     'https://luxecarts-pv1l.onrender.com'
   ];
 
@@ -37,7 +35,7 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       console.log('Blocked by CORS for origin:', origin);
