@@ -20,9 +20,30 @@ const app = express();
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: false, limit: '10mb' }));
 
+// Get allowed origins from environment variable or use default values
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? 
+  process.env.ALLOWED_ORIGINS.split(',') : 
+  [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://luxecarts.onrender.com',
+    'https://luxecarts-frontend.onrender.com',
+    'https://luxecarts-pv1l.onrender.com'
+  ];
+
 // Configure CORS with proper options
 const corsOptions = {
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      console.log('Blocked by CORS for origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
   credentials: true,
@@ -36,6 +57,7 @@ app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   console.log('Request Headers:', req.headers);
   console.log('Request Body:', req.body);
+  console.log('Origin:', req.headers.origin);
   
   // Add CORS headers manually for preflight requests
   res.header('Access-Control-Allow-Origin', req.headers.origin);
