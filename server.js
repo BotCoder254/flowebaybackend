@@ -3,6 +3,7 @@ const bodyParser = require("body-parser");
 const axios = require("axios");
 const moment = require("moment");
 const cors = require("cors");
+const https = require('https');
 const { doc, updateDoc, serverTimestamp, getDoc } = require("firebase/firestore");
 const { db } = require("./firebase");
 const { 
@@ -261,7 +262,66 @@ app.post("/stkpush", async (req, res) => {
   }
 });
 
-// Add callback endpoint to handle M-Pesa callbacks
+// Function to send SMS notifications
+const sendSMSNotification = async (phoneNumber, message) => {
+  try {
+    // Format phone number to ensure it starts with 254
+    let formattedPhone = phoneNumber.toString().trim();
+    formattedPhone = formattedPhone.replace(/^\+|^0+|\s+/g, "");
+    if (!formattedPhone.startsWith("254")) {
+      formattedPhone = "254" + formattedPhone;
+    }
+
+    const data = JSON.stringify({
+      apiKey: 'f9e412887a42ff4938baa34971e0b096',
+      shortCode: 'VasPro',
+      message: message,
+      recipient: formattedPhone,
+      callbackURL: '',
+      enqueue: 1,
+      isScheduled: false,
+    });
+
+    const options = {
+      hostname: 'api.vaspro.co.ke',
+      port: 443,
+      path: '/v3/BulkSMS/api/create',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': data.length,
+      },
+    };
+
+    return new Promise((resolve, reject) => {
+      const smsReq = https.request(options, (smsRes) => {
+        let responseData = '';
+
+        smsRes.on('data', (chunk) => {
+          responseData += chunk;
+        });
+
+        smsRes.on('end', () => {
+          console.log('SMS sent successfully:', responseData);
+          resolve(responseData);
+        });
+      });
+
+      smsReq.on('error', (error) => {
+        console.error('Error sending SMS:', error);
+        reject(error);
+      });
+
+      smsReq.write(data);
+      smsReq.end();
+    });
+  } catch (error) {
+    console.error('SMS sending error:', error);
+    throw error;
+  }
+};
+
+// Update the callback endpoint to include SMS notification
 app.post("/callback/:orderId", async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -273,18 +333,24 @@ app.post("/callback/:orderId", async (req, res) => {
     if (callbackData.Body.stkCallback.ResultCode === 0) {
       // Update order status in Firebase
       const orderRef = doc(db, 'orders', orderId);
-      await updateDoc(orderRef, {
-        paymentStatus: 'completed',
-        mpesaResponse: callbackData,
-        status: 'processing',
-        updatedAt: serverTimestamp(),
-        isVisible: true
-      });
-
-      // Send order confirmation email
       const orderDoc = await getDoc(orderRef);
+      
       if (orderDoc.exists()) {
-        await sendOrderConfirmationEmail(orderDoc.data());
+        const orderData = orderDoc.data();
+        await updateDoc(orderRef, {
+          paymentStatus: 'completed',
+          mpesaResponse: callbackData,
+          status: 'processing',
+          updatedAt: serverTimestamp(),
+          isVisible: true
+        });
+
+        // Send order confirmation email
+        await sendOrderConfirmationEmail(orderData);
+
+        // Send SMS notification
+        const message = `Thank you for your order at LuxeCarts! Your order #${orderId.slice(-6)} has been confirmed and is being processed. We'll update you on the status.`;
+        await sendSMSNotification(orderData.shippingDetails.phone, message);
       }
 
       console.log('Order updated successfully:', orderId);
@@ -436,7 +502,7 @@ app.post("/query", async (req, res) => {
   }
 });
 
-// Add a new endpoint for order status updates
+// Update the order status update endpoint to include SMS
 app.post("/update-order-status", async (req, res) => {
   try {
     const { orderId, newStatus } = req.body;
@@ -458,13 +524,31 @@ app.post("/update-order-status", async (req, res) => {
       });
     }
 
+    const orderData = orderDoc.data();
     await updateDoc(orderRef, {
       status: newStatus,
       updatedAt: serverTimestamp()
     });
 
     // Send status update email
-    await sendOrderStatusUpdateEmail(orderDoc.data(), newStatus);
+    await sendOrderStatusUpdateEmail(orderData, newStatus);
+
+    // Send SMS notification based on status
+    let message = '';
+    switch (newStatus) {
+      case 'processing':
+        message = `Your LuxeCarts order #${orderId.slice(-6)} is being processed. We'll notify you when it ships.`;
+        break;
+      case 'shipped':
+        message = `Great news! Your LuxeCarts order #${orderId.slice(-6)} has been shipped and is on its way.`;
+        break;
+      case 'delivered':
+        message = `Your LuxeCarts order #${orderId.slice(-6)} has been delivered. Thank you for shopping with us!`;
+        break;
+      default:
+        message = `Your LuxeCarts order #${orderId.slice(-6)} status has been updated to: ${newStatus}`;
+    }
+    await sendSMSNotification(orderData.shippingDetails.phone, message);
 
     res.json({
       ResponseCode: "0",
@@ -479,7 +563,7 @@ app.post("/update-order-status", async (req, res) => {
   }
 });
 
-// Add a new endpoint for order cancellation
+// Update the order cancellation endpoint to include SMS
 app.post("/cancel-order", async (req, res) => {
   try {
     const { orderId } = req.body;
@@ -501,13 +585,18 @@ app.post("/cancel-order", async (req, res) => {
       });
     }
 
+    const orderData = orderDoc.data();
     await updateDoc(orderRef, {
       status: 'cancelled',
       updatedAt: serverTimestamp()
     });
 
     // Send cancellation email
-    await sendOrderCancellationEmail(orderDoc.data());
+    await sendOrderCancellationEmail(orderData);
+
+    // Send SMS notification
+    const message = `Your LuxeCarts order #${orderId.slice(-6)} has been cancelled. Any payment made will be refunded within 5-7 business days.`;
+    await sendSMSNotification(orderData.shippingDetails.phone, message);
 
     res.json({
       ResponseCode: "0",
