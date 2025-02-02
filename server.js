@@ -502,7 +502,7 @@ app.post("/query", async (req, res) => {
   }
 });
 
-// Update the order status update endpoint to include SMS
+// Update the order status update endpoint to include enhanced notification tracking
 app.post("/update-order-status", async (req, res) => {
   try {
     const { orderId, newStatus } = req.body;
@@ -525,35 +525,80 @@ app.post("/update-order-status", async (req, res) => {
     }
 
     const orderData = orderDoc.data();
+
+    // Check if notification was already sent for this status
+    if (orderData.lastNotificationStatus === newStatus && orderData.notificationSent) {
+      return res.json({
+        ResponseCode: "0",
+        message: "Status already updated and notification sent"
+      });
+    }
+
+    // Update order status
     await updateDoc(orderRef, {
       status: newStatus,
       updatedAt: serverTimestamp()
     });
 
-    // Send status update email
-    await sendOrderStatusUpdateEmail(orderData, newStatus);
+    try {
+      // Send email notification
+      await sendOrderStatusUpdateEmail(orderData, newStatus);
+      console.log('Status update email sent successfully for order:', orderId);
 
-    // Send SMS notification based on status
-    let message = '';
-    switch (newStatus) {
-      case 'processing':
-        message = `Your LuxeCarts order #${orderId.slice(-6)} is being processed. We'll notify you when it ships.`;
-        break;
-      case 'shipped':
-        message = `Great news! Your LuxeCarts order #${orderId.slice(-6)} has been shipped and is on its way.`;
-        break;
-      case 'delivered':
-        message = `Your LuxeCarts order #${orderId.slice(-6)} has been delivered. Thank you for shopping with us!`;
-        break;
-      default:
-        message = `Your LuxeCarts order #${orderId.slice(-6)} status has been updated to: ${newStatus}`;
+      // Send SMS notification based on status
+      let message = '';
+      switch (newStatus) {
+        case 'processing':
+          message = `Your LuxeCarts order #${orderId.slice(-6)} is being processed. We'll notify you when it ships.`;
+          break;
+        case 'shipped':
+          message = `Great news! Your LuxeCarts order #${orderId.slice(-6)} has been shipped and is on its way.`;
+          break;
+        case 'delivered':
+          message = `Your LuxeCarts order #${orderId.slice(-6)} has been delivered. Thank you for shopping with us!`;
+          break;
+        default:
+          message = `Your LuxeCarts order #${orderId.slice(-6)} status has been updated to: ${newStatus}`;
+      }
+      
+      await sendSMSNotification(orderData.shippingDetails.phone, message);
+      console.log('Status update SMS sent successfully for order:', orderId);
+
+      // Update notification tracking
+      await updateDoc(orderRef, {
+        notificationSent: true,
+        lastNotificationStatus: newStatus,
+        lastNotificationTime: serverTimestamp(),
+        notificationHistory: [...(orderData.notificationHistory || []), {
+          type: 'status_update',
+          status: newStatus,
+          emailSent: true,
+          smsSent: true,
+          timestamp: serverTimestamp()
+        }]
+      });
+
+      res.json({
+        ResponseCode: "0",
+        message: "Order status updated and notifications sent successfully"
+      });
+    } catch (notificationError) {
+      console.error('Error sending notifications:', notificationError);
+      
+      // Update notification tracking with error
+      await updateDoc(orderRef, {
+        notificationSent: false,
+        notificationError: notificationError.message,
+        notificationHistory: [...(orderData.notificationHistory || []), {
+          type: 'status_update',
+          status: newStatus,
+          error: notificationError.message,
+          timestamp: serverTimestamp()
+        }]
+      });
+
+      throw notificationError;
     }
-    await sendSMSNotification(orderData.shippingDetails.phone, message);
-
-    res.json({
-      ResponseCode: "0",
-      message: "Order status updated successfully"
-    });
   } catch (error) {
     console.error('Error updating order status:', error);
     res.status(500).json({
