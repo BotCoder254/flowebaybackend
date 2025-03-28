@@ -202,7 +202,7 @@ app.post("/stkpush", async (req, res) => {
       PartyA: phoneNumber,
       PartyB: "4121151",
       PhoneNumber: phoneNumber,
-      CallBackURL: `https://luxecarts-mpesa.onrender.com/callback/${orderId}`,
+      CallBackURL: `${process.env.BASE_URL}/callback/${orderId}`,
       AccountReference: "LUXECARTS",
       TransactionDesc: "Payment for order",
     };
@@ -397,7 +397,7 @@ app.post("/query", async (req, res) => {
     ).toString("base64");
 
     const requestBody = {
-      BusinessShortCode: "4121151",
+      BusinessShortCode: "4121151", //change this to the correct Till number 
       Password: password,
       Timestamp: timestampx,
       CheckoutRequestID: queryCode,
