@@ -661,6 +661,116 @@ app.post("/cancel-order", async (req, res) => {
   }
 });
 
+// SMS endpoint
+app.post("/send-sms", async (req, res) => {
+  try {
+    const { recipient, message } = req.body;
+    
+    if (!recipient || !message) {
+      return res.status(400).json({
+        ResponseCode: "1",
+        errorMessage: "Recipient and message are required"
+      });
+    }
+    
+    const result = await sendSMSNotification(recipient, message);
+    
+    res.json({
+      ResponseCode: "0",
+      message: "SMS sent successfully",
+      result
+    });
+  } catch (error) {
+    console.error('Error sending SMS:', error);
+    res.status(500).json({
+      ResponseCode: "1",
+      errorMessage: error.message || "Failed to send SMS"
+    });
+  }
+});
+
+// Email endpoints
+app.post("/send-email/confirmation", async (req, res) => {
+  try {
+    const { orderDetails } = req.body;
+    
+    if (!orderDetails) {
+      return res.status(400).json({
+        ResponseCode: "1",
+        errorMessage: "Order details are required"
+      });
+    }
+    
+    const result = await sendOrderConfirmationEmail(orderDetails);
+    
+    res.json({
+      ResponseCode: "0",
+      message: "Order confirmation email sent successfully",
+      result
+    });
+  } catch (error) {
+    console.error('Error sending confirmation email:', error);
+    res.status(500).json({
+      ResponseCode: "1",
+      errorMessage: error.message || "Failed to send confirmation email"
+    });
+  }
+});
+
+app.post("/send-email/status-update", async (req, res) => {
+  try {
+    const { orderDetails, newStatus } = req.body;
+    
+    if (!orderDetails || !newStatus) {
+      return res.status(400).json({
+        ResponseCode: "1",
+        errorMessage: "Order details and new status are required"
+      });
+    }
+    
+    const result = await sendOrderStatusUpdateEmail(orderDetails, newStatus);
+    
+    res.json({
+      ResponseCode: "0",
+      message: "Status update email sent successfully",
+      result
+    });
+  } catch (error) {
+    console.error('Error sending status update email:', error);
+    res.status(500).json({
+      ResponseCode: "1",
+      errorMessage: error.message || "Failed to send status update email"
+    });
+  }
+});
+
+app.post("/send-email/cancellation", async (req, res) => {
+  try {
+    const { orderDetails } = req.body;
+    
+    if (!orderDetails) {
+      return res.status(400).json({
+        ResponseCode: "1",
+        errorMessage: "Order details are required"
+      });
+    }
+    
+    const result = await sendOrderCancellationEmail(orderDetails);
+    
+    res.json({
+      ResponseCode: "0",
+      message: "Order cancellation email sent successfully",
+      result
+    });
+  } catch (error) {
+    console.error('Error sending cancellation email:', error);
+    res.status(500).json({
+      ResponseCode: "1",
+      errorMessage: error.message || "Failed to send cancellation email"
+    });
+  }
+});
+
 const PORT = 8000; // Changed port to 8000
 app.listen(PORT, () => {
   console.log(`M-Pesa API Server is running on port ${PORT}`);
