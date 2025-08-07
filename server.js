@@ -25,7 +25,7 @@ app.use(bodyParser.urlencoded({ extended: false, limit: '10mb' }));
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? 
   process.env.ALLOWED_ORIGINS.split(',') : 
   [
-    'http://localhost:3000',
+    'http://localhost:5000',
     'http://127.0.0.1:3000',
     'https://luxecarts-pv1l.onrender.com'
   ];
